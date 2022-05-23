@@ -13,6 +13,7 @@ packageVersion("ShortRead")
 library(Biostrings)
 packageVersion("Biostrings")
 
+# I might not have that data? do i need to download it or something?#
 path <- "/scratch/users/eliu31/Fastq1/"
 list.files(path)
 
@@ -38,8 +39,8 @@ FWD.orients
 
 fnFs.filtN <- file.path(path, "filtN", basename(fnFs)) # Put N-filterd files in filtN/ subdirectory
 fnRs.filtN <- file.path(path, "filtN", basename(fnRs))
-filterAndTrim(fnFs, fnFs.filtN, fnRs, fnRs.filtN, maxN = 0, multithread = TRUE)
-
+filterAndTrim(fnFs, fnFs.filtN, fnRs, fnRs.filtN, maxN = 0, multithread = FALSE)
+# had to change to multithread = FALSE for windows, but it also says that its a list which is invalid
 
 primerHits <- function(primer, fn) {
   # Counts number of reads in which the primer is found
