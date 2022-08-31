@@ -120,8 +120,6 @@ ps.neg <- prune_samples(sample_data(ps_fukami)$is.neg == "TRUE", ps_fukami)
 # ex: ps.pos <- prune_samples(sample_data(ps_onlyfungi)$IsControl == "FALSE", ps_onlyfungi)
 ps.pos <- prune_samples(sample_data(ps_fukami)$is.neg == "FALSE", ps_fukami)
 
-
-
 #Make data.frame of prevalence in positive and negative samples 
 
 #using prev threshold = 0.5
@@ -130,6 +128,7 @@ ps.pos <- prune_samples(sample_data(ps_fukami)$is.neg == "FALSE", ps_fukami)
 # ex: ggplot(data=df.pres, aes(x=prevalence.neg, y=prevalence.pos, color=contam.prev)) + geom_point()
 df.pres <- data.frame(prevalence.pos=taxa_sums(ps.pos), prevalence.neg=taxa_sums(ps.neg), contam.prev=contamdf.prev$contaminant)
 ggplot(data=df.pres, aes(x=prevalence.neg, y=prevalence.pos, color=contam.prev)) + geom_point()
+
 
 #Get sequences that are contaminants
 
@@ -157,13 +156,19 @@ ps_fukami_NC = prune_taxa(newTaxa, ps_fukami)
 
 ## goal: remove the contaminant taxa from ps (both labs) ##
 
+allTaxa = taxa_names(ps)
+newTaxa <- allTaxa[!(allTaxa %in% contaminants)]
+ps_NC = prune_taxa(newTaxa, ps)
+
+# ? how to see the names of the taxa that are contaminants ?
+
 #### Rarefaction ####
 
 ## Using phyloseq loaded & controls removed ps object
 #ex: ps.nocontrols
 
-#defining function that is the wrapper
-#ex: ggrare <- function(physeq, step = 10, label = NULL, color = NULL, plot = TRUE, parallel = FALSE, se = TRUE) {
+#defining function that is the wrapper -- Does not need to be changed
+ggrare <- function(physeq, step = 10, label = NULL, color = NULL, plot = TRUE, parallel = FALSE, se = TRUE) {
   ## Args:
   ## - physeq: phyloseq class object, from which abundance data are extracted
   ## - step: Step size for sample size in rarefaction curves
@@ -280,10 +285,7 @@ invisible(p)
 
 #ex: p
 #Rarefaction:
-#It looks like ~20,000 reads would be a good choice to 
-#get the "best" representation of communitities
 
-#BUT it looks like ~10000 reads would allow us to keep most samples
 
 
 ## Let's look at library size to see distribution of reads across samples
@@ -296,4 +298,4 @@ invisible(p)
 #ex: ggplot(data=df, aes(x=Index, y=LibrarySize, color=Competion)) + geom_point() + geom_hline(yintercept = 10000, linetype="dashed")
 #ex: ggplot(data=df, aes(x=Index, y=LibrarySize, color=Treatment)) + geom_point() + geom_hline(yintercept = 10000, linetype="dashed")
 
-#7557 is the minimum library size - we will rarefy to this to keep all samples
+
