@@ -4,8 +4,6 @@
 # Input: 
 # Outputs:
 
-
-
 #### Load Data ####
 
 
@@ -35,29 +33,19 @@ library(ape)
 library(ShortRead)
 library(tidyr)
 library(gridExtra)
+library(Rmisc)
 
+set.seed(20123)
 
-seqtab <- read.csv("Data/seqtab_final - seqtab_final(1).csv")
-taxatab <- read.csv("Data/taxa - taxa.csv")
-metadata <- read.csv("Data/lichen_metadata - metadata.csv")
+seqtab <- readRDS("Data/seqtab.RDS")
+taxatab <- readRDS("Data/taxa.RDS")
+metadata <- readRDS("Data/metadata.RDS")
 
-colnames(seqtab)[1]
-row.names(seqtab) <- seqtab[,1]
-seqtab <- seqtab[,-1]
-
-row.names(taxatab) <- taxatab[,1]
-taxatab <- taxatab[,-1]
-
-colnames(metadata)
-row.names(metadata) <- metadata[,"full.2"]
-
-seqtab <- as.matrix(seqtab)
-taxatab <- as.matrix(taxatab)
 
 ### Create phyloseq object ####
 
 # put what I assign the names to the data frames into the parentheses
-ps <- phyloseq(otu_table(seqtab,taxa_are_rows = FALSE),
+ps <- phyloseq(otu_table(seqtab,taxa_are_rows = TRUE),
                sample_data(metadata),
                tax_table(taxatab))
 
@@ -65,102 +53,15 @@ ps <- phyloseq(otu_table(seqtab,taxa_are_rows = FALSE),
 # extracts sequence counts: otu_table()
 # extracts taxonomy table: taxa_table()
 
-#### Decontaminate data ####
+#### Remove Evernia ####
 
-# example: ps_h20 <- subset_samples(ps_onlyfungi, SampleSubType!="Control_Kit")
-# "ps_control" <- subset_samples("ps_data", SampleSubType!= )
-?
-## Using decontam to deal with our NC
-#We do not have input DNA concentration, so we are using decontom's
-#“prevalence” method. In this method, the prevalence 
-#(presence/absence across samples) of each sequence feature 
-#in true positive samples is compared to the prevalence 
-#in negative controls to identify contaminants.
-
-#identify contaminants using the prevelence method
-# Using the default threshold for a contaminant is 
-#that it reaches a probability of 0.1 in the statistical test being performed.
-
-
-#I tried to make a subset of the data with just the samples from the fukami lab??
-ps_fukami <- subset_samples(ps, lab=="fukami")
-
-#define the neg explicitly using Marina's code
-#sample_data(ps)$is.neg <- sample_data(ps)$SampleType == "Kit"
-sample_data(ps_fukami)$is.neg <- sample_data(ps_fukami)$treatment == "control"
-
-# example: contamdf.prev.h20 <- isContaminant(ps_h20 , method="prevalence", neg="IsControl")
-contamdf.prev <- isContaminant(ps_fukami , method="prevalence", neg="is.neg", threshold = 0.5)
-
-
-#how many contaminants
-
-# ex: table(contamdf.prev.h20$contaminant)
-table(contamdf.prev$contaminant)
-
-#which seq is contaminant
-
-# ex: which(contamdf.prev.h20$contaminant) 
-which(contamdf.prev$contaminant)
-
-#Using a more strict threshold
-#threshold=0.5, which will identify as contaminants 
-#all sequences there are more prevalent in negative controls 
-#than in positive samples
-
-
-#Looking at the number of times these taxa were observed in 
-#negative controls and positive samples:
-
-# ex: ps.neg <- prune_samples(sample_data(ps_onlyfungi)$IsControl == "TRUE", ps_onlyfungi)
-ps.neg <- prune_samples(sample_data(ps_fukami)$is.neg == "TRUE", ps_fukami)
-
-#Make phyloseq object of presence-absence in true positive samples
-
-# ex: ps.pos <- prune_samples(sample_data(ps_onlyfungi)$IsControl == "FALSE", ps_onlyfungi)
-ps.pos <- prune_samples(sample_data(ps_fukami)$is.neg == "FALSE", ps_fukami)
-
-#Make data.frame of prevalence in positive and negative samples 
-
-#using prev threshold = 0.5
-
-# ex: df.pres <- data.frame(prevalence.pos=taxa_sums(ps.pos.presence), prevalence.neg=taxa_sums(ps.neg.presence), contam.prev=contamdf.prev.h20.05$contaminant)
-# ex: ggplot(data=df.pres, aes(x=prevalence.neg, y=prevalence.pos, color=contam.prev)) + geom_point()
-df.pres <- data.frame(prevalence.pos=taxa_sums(ps.pos), prevalence.neg=taxa_sums(ps.neg), contam.prev=contamdf.prev$contaminant)
-ggplot(data=df.pres, aes(x=prevalence.neg, y=prevalence.pos, color=contam.prev)) + geom_point()
-
-
-#Get sequences that are contaminants
-
-# ex: contaminants.h20 <- subset(contamdf.prev.h20.05, contaminant == "TRUE")
-contaminants <- subset(contamdf.prev, contaminant == "TRUE")
-
-#save these files as csv to investigate
-
-# ex: write.csv(contaminants.h20, "contaminants.h20.05.csv")
-write.csv(contaminants, "contaminants.csv")
-
-#Combined in Excel while investigating and removed duplicates
-
-# ex: contaminants <- read.csv("contaminants.combined.noduplicates.csv")
-contaminants <- read.csv("contaminants.csv")
-
-#We will want to remove these ASVs from further analyses
-
-# ex: allTaxa = taxa_names(ps_onlyfungi)
-# ex: newTaxa <- allTaxa[!(allTaxa %in% contaminants.list)]
-# ex: ps_onlyfungi_NC = prune_taxa(newTaxa, ps_onlyfungi)\
-allTaxa = taxa_names(ps_fukami)
-newTaxa <- allTaxa[!(allTaxa %in% contaminants)]
-ps_fukami_NC = prune_taxa(newTaxa, ps_fukami)
-
-## goal: remove the contaminant taxa from ps (both labs) ##
-
+# remove specific genera from ps
+taxatab_df <- as.data.frame(taxatab)
+hosttaxa <- row.names(taxatab_df[which(taxatab_df$Genus == "g__Evernia"), ])
 allTaxa = taxa_names(ps)
-newTaxa <- allTaxa[!(allTaxa %in% contaminants)]
-ps_NC = prune_taxa(newTaxa, ps)
+newTaxa <- allTaxa[!(allTaxa %in% hosttaxa)]
+ps_final <- prune_taxa(newTaxa, ps)
 
-# ? how to see the names of the taxa that are contaminants ?
 
 #### Rarefaction ####
 
@@ -191,14 +92,14 @@ ggrare <- function(physeq, step = 10, label = NULL, color = NULL, plot = TRUE, p
   ## - parallel: should rarefaction be parallelized (using parallel framework)
   ## - se:    Default TRUE. Logical. Should standard errors be computed. 
   ## require vegan
- #ex: x <- as(otu_table(physeq), "matrix")
- #ex: if (taxa_are_rows(physeq)) { x <- t(x) }
+x <- as(otu_table(physeq), "matrix")
+if (taxa_are_rows(physeq)) { x <- t(x) }
 
 
 ## This script is adapted from vegan `rarecurve` function
-#ex: tot <- rowSums(x)
-#ex: S <- rowSums(x > 0)
-#ex: nr <- nrow(x)
+tot <- rowSums(x)
+S <- rowSums(x > 0)
+nr <- nrow(x)
 
 
 # # #ex: 
@@ -261,34 +162,36 @@ if (se) { ## add standard error if available
 if (plot) {
   plot(p)
 }
-invisible(p)
+invisible(p) 
+}
 
 
 # # #
 
 #plotting rarefaction curves, using step = 1000 reads
-#ex: p = ggrare(ps.nocontrols, step = 1000, label = "SampleID", color = "SampleSubType") 
+p = ggrare(ps_final, step = 1000, label = "location", color = "mean.tissue.nitrogen") 
+# the label is a column name from the metadata of a variable I want to look at, can be blank
 
 #drawing cut-off line at 20000 reads
-#ex: p + geom_vline(xintercept = 20000, linetype="dashed")
+#p + geom_vline(xintercept = 20000, linetype="dashed")
 
 #drawing cut-off line at 30000 reads
-#ex: p + geom_vline(xintercept = 30000, linetype="dashed")
+#p + geom_vline(xintercept = 30000, linetype="dashed")
 
 #drawing cut-off line at 10000 reads
-#ex: p + geom_vline(xintercept = 10000, linetype="dashed")
+#p + geom_vline(xintercept = 10000, linetype="dashed")
 
 
 #drawing cut-off line at 5000 reads
-#ex: p + geom_vline(xintercept = 5000, linetype="dashed")
+#p + geom_vline(xintercept = 5000, linetype="dashed")
 
 
-#ex: p
+
 #Rarefaction:
 
 
-
-## Let's look at library size to see distribution of reads across samples
+## Maybe don't do anything with this
+# Let's look at library size to see distribution of reads across samples
 
 ## Look at library size
 #ex: df <- as.data.frame(sample_data(ps.nocontrols)) # Put sample_data into a ggplot-friendly data.frame
@@ -298,4 +201,281 @@ invisible(p)
 #ex: ggplot(data=df, aes(x=Index, y=LibrarySize, color=Competion)) + geom_point() + geom_hline(yintercept = 10000, linetype="dashed")
 #ex: ggplot(data=df, aes(x=Index, y=LibrarySize, color=Treatment)) + geom_point() + geom_hline(yintercept = 10000, linetype="dashed")
 
+
+## next steps: rarefy to different size
+# rarefy even depth fucntion
+# take output and run an ordination -- look at marinas big code -- ITS ordinations actual ordination and figures ordinations
+
+
+
+#Even depth function:
+#ex: ps.nocontrols.rare9434 <- rarefy_even_depth(ps.nocontrols, sample.size = 9434, replace = FALSE, rngseed = 5311) 
+set.seed(20123)
+ps_final_rare <- rarefy_even_depth(ps_final, sample.size = 2095, rngseed = FALSE, replace = FALSE) 
+#5 samples and 165 OTUs were removed at samples size 2095
+
+p = ggrare(ps_final_rare, step = 1000, label = "location", color = "Landscape.position") 
+
+# df <- as.data.frame(sample_data(ps_final)) # Put sample_data into a ggplot-friendly data.frame
+#df$LibrarySize <- sample_sums(ps_final)
+#df <- df[order(df$LibrarySize),]
+#df$Index <- seq(nrow(df))
+#ggplot(data=df, aes(x=Index, y=LibrarySize, color=Competion)) + geom_point() + geom_hline(yintercept = 10000, linetype="dashed")
+#ggplot(data=df, aes(x=Index, y=LibrarySize, color=Treatment)) + geom_point() + geom_hline(yintercept = 10000, linetype="dashed")
+
+
+### Statistical data ####
+
+DistBC <- phyloseq::distance(ps_final_rare, method = "bray", type="samples")
+
+## mean.tissue.nitrogen -- not significant
+set.seed(20123)
+adonis2(DistBC ~ mean.tissue.nitrogen, as(sample_data(ps_final_rare), "data.frame"), permutations = 9999) 
+
+Mean_tissue_nitrogen <- betadisper(DistBC, as(sample_data(ps_final_rare), "data.frame")$mean.tissue.nitrogen)
+set.seed(20123)
+permutest(Mean_tissue_nitrogen, permutations = 9999) 
+plot(Mean_tissue_nitrogen, label = F)
+
+## mean.annual.precip -- significant USE!!!
+set.seed(20123)
+adonis2(DistBC ~ mean.annual.precip, as(sample_data(ps_final_rare), "data.frame"), permutations = 9999) 
+
+Mean_annual_precip <- betadisper(DistBC, as(sample_data(ps_final_rare), "data.frame")$mean.annual.precip)
+set.seed(20123)
+permutest(Mean_annual_precip, permutations = 9999) 
+plot(Mean_annual_precip, label = F)
+
+## infected -- not significant
+set.seed(20123)
+adonis2(DistBC ~ infected, as(sample_data(ps_final_rare), "data.frame"), permutations = 9999, na.action = na.omit) 
+
+Infected <- betadisper(DistBC, as(sample_data(ps_final_rare), "data.frame")$infected)
+set.seed(20123)
+permutest(Infected, permutations = 9999) 
+plot(Infected, label = F)
+
+## location -- significant
+set.seed(20123)
+adonis2(DistBC ~ location, as(sample_data(ps_final_rare), "data.frame"), permutations = 9999) 
+
+Location <- betadisper(DistBC, as(sample_data(ps_final_rare), "data.frame")$location)
+set.seed(20123)
+permutest(Location, permutations = 9999) 
+plot(Location, label = F)
+
+#Landscape.position -- significant USE!!!
+set.seed(20123)
+adonis2(DistBC ~ Landscape.position, as(sample_data(ps_final_rare), "data.frame"), permutations = 9999) 
+
+Landscape_position <- betadisper(DistBC, as(sample_data(ps_final_rare), "data.frame")$Landscape.position)
+set.seed(20123)
+permutest(Landscape_position, permutations = 9999) 
+plot(Landscape_position, label = F)
+
+#winter.light.trans -- not significant
+set.seed(20123)
+adonis2(DistBC ~ winter.light.trans, as(sample_data(ps_final_rare), "data.frame"), permutations = 9999) 
+
+Winter_light_trans <- betadisper(DistBC, as(sample_data(ps_final_rare), "data.frame")$winter.light.trans)
+set.seed(20123)
+permutest(Winter_light_trans, permutations = 9999) 
+plot(Winter_light_trans, label = F)
+
+#canopy.cover.measured -- not significant
+set.seed(20123)
+adonis2(DistBC ~ canopy.cover.measured, as(sample_data(ps_final_rare), "data.frame"), permutations = 9999) 
+
+Canopy_cover_measured <- betadisper(DistBC, as(sample_data(ps_final_rare), "data.frame")$canopy.cover.measured)
+set.seed(20123)
+permutest(Canopy_cover_measured, permutations = 9999) 
+plot(Canopy_cover_measured, label = F)
+
+#proportion.infected -- not significant
+set.seed(20123)
+adonis2(DistBC ~ proportion.infected, as(sample_data(ps_final_rare), "data.frame"), permutations = 9999) 
+
+Proportion.infected <- betadisper(DistBC, as(sample_data(ps_final_rare), "data.frame")$proportion.infected)
+set.seed(20123)
+permutest(Proportion.infected, permutations = 9999) 
+plot(Proportion.infected, label = F)
+
+#max.etr - photosynthesis capacity -- not significant
+set.seed(20123)
+adonis2(DistBC ~ max.etr, as(sample_data(ps_final_rare), "data.frame"), permutations = 9999, na.action = na.omit) 
+
+Max.etr <- betadisper(DistBC, as(sample_data(ps_final_rare), "data.frame")$max.etr)
+set.seed(20123)
+permutest(Max.etr, permutations = 9999) 
+plot(Max.etr, label = F)
+
+#mean.n15 -- significant!! maybe Use a little
+set.seed(20123)
+adonis2(DistBC ~ mean.n15, as(sample_data(ps_final_rare), "data.frame"), permutations = 9999, na.action = na.omit) 
+
+Mean.n15 <- betadisper(DistBC, as(sample_data(ps_final_rare), "data.frame")$mean.n15)
+set.seed(20123)
+permutest(Mean.n15, permutations = 9999) 
+plot(Mean.n15, label = F)
+
+#evernia.abundance -- not significant
+set.seed(20123)
+adonis2(DistBC ~ evernia.abundance, as(sample_data(ps_final_rare), "data.frame"), permutations = 9999, na.action = na.omit) 
+
+Evernia.abundance <- betadisper(DistBC, as(sample_data(ps_final_rare), "data.frame")$evernia.abundance)
+set.seed(20123)
+permutest(Evernia.abundance, permutations = 9999) 
+plot(Evernia.abundance, label = F)
+
+#Pb.e -- significant p=.04 maybe use a little
+set.seed(20123)
+adonis2(DistBC ~ Pb.e, as(sample_data(ps_final_rare), "data.frame"), permutations = 9999, na.action = na.omit) 
+
+Lead <- betadisper(DistBC, as(sample_data(ps_final_rare), "data.frame")$Pb.e)
+set.seed(20123)
+permutest(Lead, permutations = 9999) 
+plot(Lead, label = F)
+
+#Cd.e -- not significant p=.06
+set.seed(20123)
+adonis2(DistBC ~ Cd.e, as(sample_data(ps_final_rare), "data.frame"), permutations = 9999, na.action = na.omit) 
+
+Cadmium <- betadisper(DistBC, as(sample_data(ps_final_rare), "data.frame")$Cd.e)
+set.seed(20123)
+permutest(Cadmium, permutations = 9999) 
+plot(Cadmium, label = F)
+
+#aspect (direction it faces) -- significant USE!!!
+set.seed(20123)
+adonis2(DistBC ~ aspect, as(sample_data(ps_final_rare), "data.frame"), permutations = 9999, na.action = na.omit) 
+
+Aspect <- betadisper(DistBC, as(sample_data(ps_final_rare), "data.frame")$aspect)
+set.seed(20123)
+permutest(Aspect, permutations = 9999) 
+plot(Aspect, label = F)
+
+#num.asco (number of ascomata) -- significant
+set.seed(20123)
+adonis2(DistBC ~ num.asco, as(sample_data(ps_final_rare), "data.frame"), permutations = 9999, na.action = na.omit) 
+
+Num.asco <- betadisper(DistBC, as(sample_data(ps_final_rare), "data.frame")$num.asco)
+set.seed(20123)
+permutest(Num.asco, permutations = 9999) 
+plot(Num.asco, label = F)
+
+#c.per.e -- significant
+set.seed(20123)
+adonis2(DistBC ~ c.per.e, as(sample_data(ps_final_rare), "data.frame"), permutations = 9999, na.action = na.omit) 
+
+
+
+### ordination ####
+
+ps_final_rare_ord <- ordinate(
+  physeq = ps_final_rare, 
+  method = "PCoA", 
+  distance = "bray")
+
+#ordination plot
+plot_ordination(ps_final_rare, ps_final_rare_ord, color = "mean.annual.precip") +
+  theme_bw(base_size = 15) +
+  geom_point(size = 2) +
+  labs(x="PCoA 22.1%" , y="PCoA 16.6%") +
+  theme(
+    legend.title = element_blank(),
+    legend.position = "right",
+    legend.text = element_text(size = 10),
+    legend.margin = margin(c(.1,.1,.1,.1))
+  ) 
+
+#maybe use, maybe don't use, maybe use aspect instead
+plot_ordination(ps_final_rare, ps_final_rare_ord, color = "Landscape.position", shape = "Landscape.position") +
+  theme_bw(base_size = 15) +
+  geom_point(size = 2) +
+  stat_ellipse(aes(group = Landscape.position)) +
+  labs(x = "PCoA1 (22.1%)", y = "PCoA2 (16.6%)") +
+  theme(
+    legend.title = element_blank(),
+    legend.position = "right",
+    legend.text = element_text(size = 10),
+    legend.margin = margin(c(.1,.1,.1,.1))
+  ) 
+
+#probable convergence failure
+
+
+### estimate richness ####
+richness <- estimate_richness(ps_final_rare, measures = "Observed")
+
+richness <- cbind(richness, sample_data(ps_final_rare))
+
+
+richness$location <- as.factor(richness$location)
+
+set.seed(20123)
+kruskal_test(Observed ~ location, distribution = approximate(nresample = 9999), data = richness)
+
+dunnTest(Observed ~ location, data = richness, method = "bh") 
+
+#effect size, average species count
+summarySE(richness, groupvars = "location", measurevar = "Observed")
+
+
+
+plot_richness(ps_final_rare, measures = "Observed", x = "location", color = "location") + 
+  geom_boxplot(outlier.shape = NA) +
+  geom_jitter() +
+  theme_bw(base_size = 15) +
+  theme(
+    legend.position = "right",
+    legend.title = element_blank(),
+    axis.title.x = element_blank(),
+    strip.text = element_blank()
+  ) +
+  scale_color_manual(values = c("magenta4", "#1F968BFF", "goldenrod3")) +
+  labs(y = "richness")
+
+### Genera distribution ####
+ps_final_rare.RA <- transform_sample_counts(ps_final_rare, function(x) x / sum(x))
+
+#define standard error function
+se <- function(x) sqrt(var(x)/length(x))
+
+AvgRA_o.g <- tax_glom(ps_final_rare.RA, taxrank = "Genus", NArm = FALSE)
+
+#variation (originally .0002)
+AvgRA99_O_variation <- filter_taxa(AvgRA_o.g, function(x) var(x) > .0005, TRUE)
+#mean (originally .005)
+#AvgRA99_O_mean <- filter_taxa(AvgRA_o.g, function(x) mean(x) > .008, TRUE)
+
+df_o_v <- psmelt(AvgRA99_O_variation)
+#df_o_m <- psmelt(AvgRA99_O_mean)
+
+#group and calculate mean, sd and se for different taxonomic levels
+avgs_o_v <- df_o_v %>% group_by(location, Family, Genus) %>%
+  dplyr::summarise(mean = 100*mean(Abundance), sd = 100*sd(Abundance), se = 100*se(Abundance))
+
+#avgs_o_m <- df_o_m %>% group_by(location, Family, Genus) %>%
+#  dplyr::summarise(mean = 100*mean(Abundance), sd = 100*sd(Abundance), se = 100*se(Abundance))
+
+
+ggplot(avgs_o_v, aes(x = Family, y = mean, fill = Genus)) + 
+  geom_bar(stat = "identity", position = position_dodge()) +
+  geom_errorbar(aes(ymin = (mean - se), ymax = (mean + se)), 
+                width = .4, position = position_dodge(.9)) +
+  facet_grid(~location) + 
+  theme_classic() +
+  theme(axis.text.x = element_text(angle = -90, hjust = 0, vjust = .5),
+        text = element_text(size = 20)) + 
+  ylab("Mean Relative Abundance")
+
+#ggplot(avgs_o_m, aes(x = Family, y = mean, fill = Genus)) + 
+ # geom_bar(stat = "identity", position = position_dodge()) +
+  #geom_errorbar(aes(ymin = (mean - se), ymax = (mean + se)), 
+   #             width = .4, position = position_dodge(.9)) +
+  #facet_grid(~location) + 
+  #theme_classic() +
+  #theme(axis.text.x = element_text(angle = -90, hjust = 0, vjust = .5),
+   #     text = element_text(size = 20)) + 
+  #ylab("Mean Relative Abundance")
 
