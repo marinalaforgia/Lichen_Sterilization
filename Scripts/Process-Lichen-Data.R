@@ -431,6 +431,17 @@ richness <- cbind(richness, sample_data(ps_final_rare))
 richness$location <- as.factor(richness$location)
 
 set.seed(20123)
+
+hist(richness$Observed)
+library(lme4)
+library(lmerTest)
+m1 <- lm(Observed ~ mean.annual.precip, richness)
+plot(fitted(m1), resid(m1))
+qqnorm(resid(m1))
+qqline(resid(m1))
+summary(m1)
+
+
 kruskal_test(Observed ~ location, distribution = approximate(nresample = 9999), data = richness)
 
 dunnTest(Observed ~ location, data = richness, method = "bh") 
